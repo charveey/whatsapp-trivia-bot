@@ -9,11 +9,12 @@ License: MIT
 """
 
 import asyncio
-import time
 import csv
 import re
+import time
 import traceback
 from threading import Lock
+
 from WPP_Whatsapp import Create
 
 # ============================================================================
@@ -21,8 +22,8 @@ from WPP_Whatsapp import Create
 # ============================================================================
 
 QUESTION_DURATION = 15  # Seconds participants have to answer
-REP_DELAY = 10         # Seconds to wait before revealing answers
-NEXT_DELAY = 5         # Seconds to wait before next question
+REP_DELAY = 10  # Seconds to wait before revealing answers
+NEXT_DELAY = 5  # Seconds to wait before next question
 LEADERBOARD_CSV = "leaderboard.csv"  # Output file for results
 SESSION_NAME = "trivia_bot"
 GROUP_ID = "22584009084-1606390481@g.us"
@@ -33,18 +34,19 @@ CSV_PATH = "questions.csv"
 # UTILITY FUNCTIONS
 # ============================================================================
 
+
 def load_questions_from_csv(path):
     """
     Load trivia questions from a CSV file.
-    
+
     Expected CSV format:
         question,answers
         "What is 2+2?","4|four"
         "Capital of France?","Paris|paris"
-    
+
     Args:
         path (str): Path to the CSV file
-    
+
     Returns:
         list[dict]: List of question dictionaries with format:
             {
@@ -58,7 +60,9 @@ def load_questions_from_csv(path):
         for row in reader:
             question = row["question"].strip()
             # Split by pipe, normalize, and filter empty strings
-            answers = {ans.lower().strip() for ans in row["answers"].split("|") if ans.strip()}
+            answers = {
+                ans.lower().strip() for ans in row["answers"].split("|") if ans.strip()
+            }
             questions.append({"question": question, "answers": answers})
     return questions
 
@@ -66,67 +70,71 @@ def load_questions_from_csv(path):
 def normalize(text):
     """
     Normalize text for answer comparison.
-    
-    Removes punctuation, converts to lowercase, and strips whitespace.
+
+    Removes punctuation, converts to lowercase, collapses whitespace, and strips.
     This allows flexible answer matching (e.g., "Paris" matches "paris!").
-    
+
     Args:
         text (str or other): Text to normalize
-    
+
     Returns:
-        str: Normalized text (lowercase, no punctuation, trimmed)
+        str: Normalized text (lowercase, no punctuation, single spaces, trimmed)
     """
     if not isinstance(text, str):
         return ""
     # Remove all non-word characters except whitespace
-    return re.sub(r"[^\w\s]", "", text.lower()).strip()
+    text = re.sub(r"[^\w\s]", "", text.lower())
+    # Collapse multiple spaces into single space
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 # ============================================================================
 # MAIN BOT CLASS
 # ============================================================================
 
+
 class AsyncTriviaGameMaster:
     """
     Main trivia game bot class.
-    
+
     Manages WhatsApp connection, question flow, answer validation,
     and leaderboard tracking. Uses threading locks for safe concurrent
     message handling.
     """
-    
+
     def __init__(self, session_name, group_id):
         """
         Initialize the bot and connect to WhatsApp.
-        
+
         Args:
             session_name (str): Name for the WhatsApp session (for persistence)
             group_id (str): WhatsApp group ID (format: "123-456@g.us")
-        
+
         Raises:
             RuntimeError: If WhatsApp connection fails
         """
         self.group_id = group_id
-        
+
         # Initialize WhatsApp client
         self.creator = Create(session=session_name)
         self.client = self.creator.start()
 
-        if self.creator.state != 'CONNECTED':
+        if self.creator.state != "CONNECTED":
             raise RuntimeError(f"Connection failed: {self.creator.state}")
 
         # Thread safety lock for concurrent message handling
         self.lock = Lock()
 
         # ----- Per-question state (reset for each question) -----
-        self.correct_answers = set()           # Set of valid answers (normalized)
-        self.correct_respondents = []          # List of users who answered correctly
-        self.seen_users = set()                # User IDs who have already answered
-        self.current_question_msg_id = None    # Message ID of current question
-        self.current_question_text = None      # Text of current question
-        self.first_correct_message_id = None   # Message ID of first correct answer
-        self.question_timestamp = None         # When question was sent (Unix timestamp)
-        self.cutoff_timestamp = None           # Deadline for answers (Unix timestamp)
+        self.correct_answers = set()  # Set of valid answers (normalized)
+        self.correct_respondents = []  # List of users who answered correctly
+        self.seen_users = set()  # User IDs who have already answered
+        self.current_question_msg_id = None  # Message ID of current question
+        self.current_question_text = None  # Text of current question
+        self.first_correct_message_id = None  # Message ID of first correct answer
+        self.question_timestamp = None  # When question was sent (Unix timestamp)
+        self.cutoff_timestamp = None  # Deadline for answers (Unix timestamp)
 
         # ----- Leaderboard (persists across questions) -----
         self.leaderboard_data = []  # List of {question_text, winners} dicts
@@ -137,10 +145,12 @@ class AsyncTriviaGameMaster:
     # GAME FLOW METHODS
     # ========================================================================
 
-    async def run_question(self, question, answers, is_last_question=False, question_number=3):
+    async def run_question(
+        self, question, answers, is_last_question=False, question_number=3
+    ):
         """
         Run a complete question cycle: ask, wait, reveal, record.
-        
+
         Flow:
             1. Send question to group
             2. Wait QUESTION_DURATION seconds
@@ -149,7 +159,7 @@ class AsyncTriviaGameMaster:
             5. Send "REP" with answer (quotes first correct if any)
             6. If not last question: wait NEXT_DELAY, send "NEXT"
             7. Save results to leaderboard
-        
+
         Args:
             question (str): The question text
             answers (set): Set of acceptable answers
@@ -184,12 +194,16 @@ class AsyncTriviaGameMaster:
             self.cutoff_timestamp = msg_timestamp + QUESTION_DURATION
 
         print(f"QUESTION: {question}")
-        print(f"Question sent at timestamp: {msg_timestamp} ({time.strftime('%H:%M:%S', time.localtime(msg_timestamp))})")
-        print(f"Cutoff timestamp: {self.cutoff_timestamp} ({time.strftime('%H:%M:%S', time.localtime(self.cutoff_timestamp))})")
+        print(
+            f"Question sent at timestamp: {msg_timestamp} ({time.strftime('%H:%M:%S', time.localtime(msg_timestamp))})"
+        )
+        print(
+            f"Cutoff timestamp: {self.cutoff_timestamp} ({time.strftime('%H:%M:%S', time.localtime(self.cutoff_timestamp))})"
+        )
 
         # Wait for answers (answers are processed by check_answer callback)
         await asyncio.sleep(QUESTION_DURATION)
-        
+
         # Signal that time is up
         await self.send_stop()
 
@@ -207,10 +221,12 @@ class AsyncTriviaGameMaster:
         else:
             # Save final question results without sending NEXT
             with self.lock:
-                self.leaderboard_data.append({
-                    "question_text": self.current_question_text,
-                    "winners": self.correct_respondents.copy()
-                })
+                self.leaderboard_data.append(
+                    {
+                        "question_text": self.current_question_text,
+                        "winners": self.correct_respondents.copy(),
+                    }
+                )
                 print("(Last question - NEXT not sent)\n")
 
     async def send_stop(self):
@@ -221,7 +237,7 @@ class AsyncTriviaGameMaster:
     async def send_rep(self):
         """
         Send REP (reply) message with the answer.
-        
+
         If anyone answered correctly, quotes the first correct answer.
         Otherwise, lists all acceptable answers.
         """
@@ -243,7 +259,7 @@ class AsyncTriviaGameMaster:
     async def send_next(self):
         """
         Send NEXT message and save results.
-        
+
         Saves the current question to leaderboard and resets state
         for the next question.
         """
@@ -252,10 +268,12 @@ class AsyncTriviaGameMaster:
 
         # Save results and reset state (thread-safe)
         with self.lock:
-            self.leaderboard_data.append({
-                "question_text": self.current_question_text,
-                "winners": self.correct_respondents.copy()
-            })
+            self.leaderboard_data.append(
+                {
+                    "question_text": self.current_question_text,
+                    "winners": self.correct_respondents.copy(),
+                }
+            )
 
             # Reset all per-question state
             self.current_question_msg_id = None
@@ -274,7 +292,7 @@ class AsyncTriviaGameMaster:
     def check_answer(self, message):
         """
         Message callback to check if incoming message is a correct answer.
-        
+
         This runs in the WhatsApp client's callback thread, so it uses
         locks for thread safety. Only counts answers that are:
         - From group members (not bot itself)
@@ -283,7 +301,7 @@ class AsyncTriviaGameMaster:
         - Correct according to normalized matching
         - From users who haven't already answered
         - Within the first 5 correct answers
-        
+
         Args:
             message (dict): WhatsApp message object with keys:
                 - fromMe (bool): If message is from bot
@@ -298,8 +316,8 @@ class AsyncTriviaGameMaster:
             # Filter out irrelevant messages
             if (
                 not message
-                or message.get("fromMe")           # Ignore bot's own messages
-                or not message.get("isGroupMsg")   # Only group messages
+                or message.get("fromMe")  # Ignore bot's own messages
+                or not message.get("isGroupMsg")  # Only group messages
                 or message.get("from") != self.group_id  # Only from target group
             ):
                 return
@@ -325,12 +343,14 @@ class AsyncTriviaGameMaster:
                 if msg_timestamp < self.question_timestamp:
                     # Message sent before question (shouldn't happen normally)
                     return
-                
+
                 if msg_timestamp > self.cutoff_timestamp:
                     # Message sent after deadline - reject but log it
-                    print(f"⏰ Late answer from {message.get('sender', {}).get('pushname', 'Someone')}: {body} "
-                          f"(sent at {time.strftime('%H:%M:%S', time.localtime(msg_timestamp))}, "
-                          f"cutoff was {time.strftime('%H:%M:%S', time.localtime(self.cutoff_timestamp))})")
+                    print(
+                        f"⏰ Late answer from {message.get('sender', {}).get('pushname', 'Someone')}: {body} "
+                        f"(sent at {time.strftime('%H:%M:%S', time.localtime(msg_timestamp))}, "
+                        f"cutoff was {time.strftime('%H:%M:%S', time.localtime(self.cutoff_timestamp))})"
+                    )
                     return
 
                 # Check if answer is correct
@@ -357,17 +377,21 @@ class AsyncTriviaGameMaster:
                 # Record the correct answer with timing information
                 self.seen_users.add(sender_id)
                 time_diff = msg_timestamp - self.question_timestamp
-                self.correct_respondents.append({
-                    "user_id": sender_id,
-                    "name": sender_name,
-                    "timestamp": msg_timestamp,
-                    "response_time": time_diff
-                })
+                self.correct_respondents.append(
+                    {
+                        "user_id": sender_id,
+                        "name": sender_name,
+                        "timestamp": msg_timestamp,
+                        "response_time": time_diff,
+                    }
+                )
 
                 # Log the correct answer
-                print(f"✓ Correct by {sender_name}: {body} "
-                      f"(answered at {time.strftime('%H:%M:%S', time.localtime(msg_timestamp))}, "
-                      f"+{time_diff:.1f}s after question)")
+                print(
+                    f"✓ Correct by {sender_name}: {body} "
+                    f"(answered at {time.strftime('%H:%M:%S', time.localtime(msg_timestamp))}, "
+                    f"+{time_diff:.1f}s after question)"
+                )
 
         except Exception as e:
             # Catch and log any errors to prevent callback crashes
@@ -377,7 +401,7 @@ class AsyncTriviaGameMaster:
     def start_listening(self):
         """
         Register the message callback to start processing answers.
-        
+
         This sets up the bot to receive and check all incoming messages.
         """
         self.creator.client.onMessage(self.check_answer)
@@ -390,10 +414,10 @@ class AsyncTriviaGameMaster:
     def save_leaderboard_csv(self):
         """
         Save the leaderboard with detailed timing to a CSV file.
-        
+
         CSV format:
             Question | Winner1 | Time1 | ResponseTime1 | Winner2 | Time2 | ...
-            
+
         Each winner gets 3 columns: name, timestamp, and response time.
         Up to 5 winners per question.
         """
@@ -403,7 +427,7 @@ class AsyncTriviaGameMaster:
 
         with open(LEADERBOARD_CSV, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            
+
             # Write header
             header = ["Question"]
             for i in range(1, 6):
@@ -415,19 +439,19 @@ class AsyncTriviaGameMaster:
                 winners = entry["winners"]
                 question_text = entry.get("question_text", "")
                 row = [question_text]
-                
+
                 # Add winner data
                 for w in winners:
                     row += [
                         w["name"],
                         time.strftime("%H:%M:%S", time.localtime(w["timestamp"])),
-                        f"{w['response_time']:.1f}s"
+                        f"{w['response_time']:.1f}s",
                     ]
-                
+
                 # Pad row to consistent length (16 columns total)
                 while len(row) < 16:  # 1 + 5*3 = 16 columns
                     row.append("")
-                    
+
                 writer.writerow(row)
 
         print(f"Leaderboard saved to {LEADERBOARD_CSV}")
@@ -435,7 +459,7 @@ class AsyncTriviaGameMaster:
     def print_leaderboard(self):
         """
         Print a formatted leaderboard to the console.
-        
+
         Shows each question with its winners in order, including
         response times.
         """
@@ -443,30 +467,31 @@ class AsyncTriviaGameMaster:
         with self.lock:
             data_copy = [entry.copy() for entry in self.leaderboard_data]
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("LEADERBOARD")
-        print("="*80)
+        print("=" * 80)
 
         for i, entry in enumerate(data_copy, 1):
             print(f"\nQ{i}: {entry['question_text']}")
-            winners = entry['winners']
+            winners = entry["winners"]
             if winners:
                 for j, w in enumerate(winners, 1):
                     print(f"  {j}. {w['name']} - {w['response_time']:.1f}s")
             else:
                 print("  No correct answers")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
 
 
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
+
 async def main():
     """
     Main function to run the trivia game.
-    
+
     Loads questions, initializes bot, runs all questions in sequence,
     and handles leaderboard output.
     """
@@ -487,12 +512,9 @@ async def main():
     # Run each question
     total_questions = len(questions)
     for i, q in enumerate(questions, start=1):
-        is_last = (i == total_questions)
+        is_last = i == total_questions
         await bot.run_question(
-            q["question"],
-            q["answers"],
-            is_last_question=is_last,
-            question_number=i
+            q["question"], q["answers"], is_last_question=is_last, question_number=i
         )
 
     print("All questions completed!")

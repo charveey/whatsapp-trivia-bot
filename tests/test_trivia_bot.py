@@ -6,8 +6,6 @@ from threading import Lock
 import csv
 
 # Import the functions and class to test
-import sys
-sys.path.insert(0, '.')
 from trivia_bot import (
     load_questions_from_csv,
     normalize,
