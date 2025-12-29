@@ -10,23 +10,27 @@ License: MIT
 
 import asyncio
 import csv
+import os
 import re
 import time
 import traceback
 from threading import Lock
 
+from dotenv import load_dotenv
 from WPP_Whatsapp import Create
 
 # ============================================================================
 # CONFIGURATION CONSTANTS
 # ============================================================================
 
+load_dotenv()
+
 QUESTION_DURATION = 15  # Seconds participants have to answer
 REP_DELAY = 10  # Seconds to wait before revealing answers
 NEXT_DELAY = 5  # Seconds to wait before next question
 LEADERBOARD_CSV = "leaderboard.csv"  # Output file for results
 SESSION_NAME = "trivia_bot"
-GROUP_ID = "22584009084-1606390481@g.us"
+GROUP_ID = os.getenv("PROD_ID")
 CSV_PATH = "questions.csv"
 
 
